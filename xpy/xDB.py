@@ -9,10 +9,8 @@
 
 import os
 import wx
-import subprocess
 import sqlite3
-import copy
-import xshelve
+from xpy.outils import xshelve
 
 DICT_CONNEXIONS = {}
 

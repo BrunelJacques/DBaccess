@@ -16,6 +16,6 @@ mais seule une appli 32bits peut accéder à ces fichiers
 
 ## Boîte à outils pour gestion de fichiers anciens en format Access95
 Le principe retenu est de créer une appli 32 bits qui sera lancée par une appli 64 bits
-L'appli lanceur récupérant les données traitées par la lancée
+L'appli lanceur récupérant les données traitées par celle qui a été lancée
 
-## Cf services doc pour plus de précision
+## Cf /doc/* pour quelques précisions

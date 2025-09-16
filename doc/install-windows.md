@@ -1,5 +1,5 @@
-Installer Access95 sur Windows
-===========================
+Installer DBaccess sur Windows
+==============================
 
 Pour Windows, vous devez aller sur les sites des auteurs pour 
 rechercher et installer les bibliothèques suivantes.

@@ -1,0 +1,737 @@
+# Recueil de fonctions diverses
+
+import sys
+import decimal
+import wx
+import datetime
+import unicodedata
+
+if sys.platform == 'win32':
+    SEP = "\\"
+else:
+    SEP = "/"
+
+SYMBOLE = "€"
+
+LISTE_JOURS = ["Lundi", "Mardi", "Mercredi","Jeudi","Vendredi", "Samedi", "Dimanche"]
+
+LISTE_MOIS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet","Août",
+              "Septembre", "Octobre", "Novembre", "Décembre"]
+
+LISTE_MOIS_ABREGE =["Janv.", "Fév.", "Mars", "Avril", "Mai", "Juin", "Juil.",
+                    "Août", "Sept.", "Oct.", "Nov.", "Déc."]
+
+
+# Conversion wx.Datetime % datetime.date
+
+def DatetimeToWxdate(date):
+    assert isinstance(date, (datetime.datetime, datetime.date))
+    tt = date.timetuple()
+    dmy = (tt[2], tt[1] - 1, tt[0])
+    return wx.DateTime.FromDMY(*dmy)
+
+def WxdateToDatetime(date):
+    assert isinstance(date, wx.DateTime)
+    if date.IsValid():
+        ymd = map(int, date.FormatISODate().split('-'))
+        return datetime.date(*ymd)
+    else:
+        return None
+
+# Conversion des dates SQL aaaa-mm-jj
+
+def DateSqlToWxdate(dateiso):
+    # Conversion de date récupérée de requête SQL aaaa-mm-jj(ou déjà en datetime) en wx.datetime
+    if dateiso == None : return None
+    # si ce n'est pas une date iso
+    if '/' in dateiso:
+        dateiso = DateFrToSql(dateiso)
+
+    if isinstance(dateiso,datetime.date):
+        return wx.DateTime.FromDMY(dateiso.day,dateiso.month-1,dateiso.year)
+
+    if isinstance(dateiso,str) and len(dateiso) >= 10:
+        return wx.DateTime.FromDMY(int(dateiso[8:10]),int(dateiso[5:7])-1,int(dateiso[:4]))
+
+def DateSqlToDatetime(dateiso):
+    # Conversion de date récupérée de requête SQL aaaa-mm-jj (ou déjà en datetime) en datetime
+    if dateiso == None : return None
+
+    elif isinstance(dateiso,datetime.date):
+        return dateiso
+
+    elif isinstance(dateiso,str) and len(dateiso) >= 10:
+        return datetime.date(int(dateiso[:4]),int(dateiso[5:7]),int(dateiso[8:10]))
+
+def DateSqlToFr(date):
+    # Conversion de date récupérée de requête SQL  en jj/mm/aaaa
+    date = DateSqlToIso(date)
+    if len(date) < 10: return ""
+    return '%s/%s/%s'%(date[8:10],date[5:7],date[:4])
+
+def DateSqlToIso(date):
+    # Conversion de date récupérée de requête SQL en aaaa-mm-jj
+    an, mois, jour = 0,0,0
+    if date == None : return ""
+    if isinstance(date,(tuple,list,dict)): return ""
+    if not isinstance(date, str) : date = str(date)
+    date = date.strip()
+    if date == "" : return ""
+    if len(date) == 8:
+        an,mois,jour = date[:4],date[4:6],date[6:8]
+        return '%s-%s-%s'%(an,mois,jour)
+    lsplit = date.split('-')
+    if len(lsplit) == 3 :
+        an,mois,jour = lsplit[0],lsplit[1],lsplit[2]
+    lsplit = date.split('/')
+    if len(lsplit) == 3 :
+        jour,mois,an = lsplit[0],lsplit[1],lsplit[2]
+    if len(an) == 2:
+        mil = 20
+        if int(an)>50: mil = 19
+        an = mil + an
+    return '%s-%s-%s'%(an,mois,jour)
+
+def DateToDatetime(date):
+    # FmtDate normalise en FR puis retourne en datetime
+    return DateFrToDatetime(DateToFr(date))
+
+def DateToFr(date):
+    strdate = ''
+    # date multi origine, la retourne en format FR
+    if date == None or date in (wx.DateTime.FromDMY(1, 0, 1900), '', datetime.date(1900, 1, 1), "1899-12-30"):
+        strdate = ''
+    elif isinstance(date, str):
+        date = date.strip()
+        tplansi = date.split('-')
+        tpldate = date.split('/')
+        if date == '00:00:00':
+            strdate = ''
+        elif len(tplansi) == 3:
+            #format ansi classique
+            strdate = ('00' + tplansi[2])[-2:] + '/' + ('00' + tplansi[1])[-2:] + '/' + ('20' + tplansi[0])[-4:]
+        elif len(tpldate) == 3:
+            # format fr avec millenaire
+            if len(date) > 8:
+                strdate = ('00' + tpldate[0])[-2:] + '/' + ('00' + tpldate[1])[-2:] + '/' + (tpldate[2])[:4]
+            # format fr sans millenaire
+            else:
+                strdate =  ('00' + tpldate[0])[-2:]+ '/' + ('00' + tpldate[1])[-2:] + '/' + ('20' + tpldate[2])[:4]
+        elif len(date) == 6:
+            # sans séparateurs ni millenaire
+            strdate = date[:2] + '/' + date[2:4] + '/' + ('20' + date[-2:])
+        elif len(date) == 8:
+            # sans séparateur et avec millenaire jjmmaaaaa
+            strdate = date[:2]+ '/' + date[2:4] + '/' + date[-4:]
+    elif isinstance(date,(datetime.date,datetime.datetime)):
+        strdate = DatetimeToStr(date)
+    elif isinstance(date,wx.DateTime):
+        strdate = WxDateToStr(date)
+    elif isinstance(date,int):
+        # format nombre aaaammjj
+        date = str(date)
+        strdate =  date[-2:]+ '/' + date[4:6] + '/' + date[:4]
+    return strdate
+
+def DateFrToSql(datefr):
+    if not datefr: return ''
+    # Conversion de date string française reçue en formats divers
+    if not isinstance(datefr, str) : datefr = str(datefr)
+    datefr = datefr.strip()
+    # normalisation des formats divers
+    datefr = FmtDate(datefr)
+    if len(datefr)!= 10:
+        return None
+    datesql = datefr[6:10]+'-'+datefr[3:5]+'-'+datefr[:2]
+    # transposition
+    return datesql
+
+def DateFrToWxdate(datefr):
+    # Conversion d'une date chaîne jj?mm?aaaa en wx.datetime
+    if not isinstance(datefr, str) : datefr = str(datefr)
+    datefr = datefr.strip()
+    if len(datefr) != 10: return None
+    datefr = datefr.strip()
+    try:
+        dmy = (int(datefr[:2]), int(datefr[3:5]) - 1, int(datefr[6:10]))
+        dateout = wx.DateTime.FromDMY(*dmy)
+    except: dateout = None
+    return dateout
+
+def DateFrToDatetime(datefr, mute=False):
+    datestr = str(datefr)
+    # Conversion de date française jj/mm/aaaa (ou déjà en datetime) en datetime
+    try:
+        if datefr == None or datefr == '':
+            return None
+        elif isinstance(datefr,datetime.date):
+            return datefr
+        elif len(datestr.split('-')) == 3:
+            # le format était  date ansi
+            lDteSplit = datestr.split('-')
+            lDteInt = [int(x) for x in lDteSplit]
+            return datetime.date(int(lDteInt[0]), int(lDteInt[1]), int(lDteInt[2]))
+        elif len(datestr.split('/')) == 3:
+            # le format était bien une date fr
+            lDteSplit = datestr.split('/')
+            if len(lDteSplit[2]) == 2:
+                lDteSplit[2] = '20%s'%lDteSplit[2]
+            lDteInt = [int(x) for x in lDteSplit]
+            return datetime.date(int(lDteInt[2]), int(lDteInt[1]), int(lDteInt[0]))
+        else:
+            chiffres = FiltreChiffres(datestr)
+            if len(chiffres) < 7:
+                return None
+            return DateFrToDatetime(DateToFr(chiffres))
+    except:
+        if not mute:
+            wx.MessageBox("La date '%s' n'est pas reconnue"%datestr)
+    return None
+
+
+def WxDateToStr(dte,iso=False):
+    # Conversion wx.datetime en chaîne
+    if isinstance(dte, wx.DateTime):
+        if iso: return dte.Format('%Y-%m-%d')
+        else: return dte.Format('%d/%m/%Y')
+    else: return str(dte)
+
+def DatetimeToStr(dte,iso=False):
+    # Conversion d'une date datetime ou wx.datetime en chaîne
+    if isinstance(dte, wx.DateTime):
+        if iso: return dte.Format('%Y-%m-%d')
+        else: return dte.Format('%d/%m/%Y')
+    elif isinstance(dte, datetime.date):
+        dd = ("00" + str(dte.day))[-2:]
+        mm = ("00" + str(dte.month))[-2:]
+        yyyy = ("0000" + str(dte.year))[-4:]
+        if iso: return "%s-%s-%s"%(yyyy,mm,dd)
+        else: return "%s/%s/%s"%(dd,mm,yyyy)
+    else: return str(dte)
+
+def DateComplete(dateDD):
+    """ Transforme une date DD en date complète : Ex : Lundi 15 janvier 2008 """
+
+    listeJours = LISTE_JOURS
+
+    listeMois = LISTE_MOIS
+    dateComplete = listeJours[dateDD.weekday()] \
+                   + " " \
+                   + str(dateDD.day) \
+                   + " " \
+                   + listeMois[dateDD.month - 1].lower() \
+                   + " " \
+                   + str(dateDD.year)
+    return dateComplete
+
+def CalculeAge(dateReference=None, date_naiss=None):
+    """ Calcul de l'age de la personne """
+    if dateReference == None:
+        dateReference = datetime.date.today()
+    if date_naiss in (None, ""):
+        return None
+    age = (dateReference.year - date_naiss.year) - int(
+        (dateReference.month, dateReference.day) < (date_naiss.month, date_naiss.day))
+    return age
+
+def DecaleDateSql(dateIso,nbj=-1, iso=True):
+    dt = DateSqlToDatetime(dateIso) + datetime.timedelta(days=nbj)
+    return DatetimeToStr(dt,iso)
+
+def DecaleDateTime(date,nbj=-1):
+    if not DateToDatetime(date): return
+    return DateToDatetime(date) + datetime.timedelta(days=nbj)
+
+# Formatages pour OLV -------------------------------------------------------------------------------------
+
+def SetBgColour(self,montant):
+    if montant > 0.0:
+        self.SetBackgroundColour(wx.Colour(200, 240, 255))  # Bleu
+    elif montant < 0.0:
+        self.SetBackgroundColour(wx.Colour(255, 170, 200))  # Rose
+    else:
+        self.SetBackgroundColour(wx.Colour(200, 255, 180))  # Vert
+
+def FmtDecimal(montant):
+    if isinstance(montant,str): montant = montant.replace(',','.')
+    if isinstance(montant,str): montant = montant.replace(' ','')
+    if montant == None or montant == '' or float(montant) == 0:
+        return ""
+    strMtt = '{:,.2f} '.format(float(montant))
+    strMtt = strMtt.replace(',',' ')
+    return strMtt
+
+def FmtQte(nombre):
+    if isinstance(nombre,str):
+        nombre = nombre.replace(',','.')
+    nombre = str(nombre)
+    try:
+        x=float(nombre)
+    except: return ""
+    if nombre == None or nombre == '' or float(nombre) == 0.0:
+        return ""
+    lstNb = nombre.split('.')
+    if len(lstNb) == 2:
+        nombre = lstNb[0]+'.'+ lstNb[1][:2]
+    return nombre
+
+def FmtInt(montant):
+    if isinstance(montant,str):
+        montant = montant.replace(',','.')
+    try:
+        x=float(montant)
+    except: return ""
+    if montant == None or montant == '' or float(montant) == 0:
+        return ""
+    strMtt = '{:,.0f} '.format(int(float(montant)))
+    strMtt = strMtt.replace(',',' ')
+    return strMtt
+
+def FmtIntNoSpce(montant):
+    if isinstance(montant,str):
+        montant = montant.replace(',','.')
+    try:
+        x=float(montant)
+    except: return ""
+    if montant == None or montant == '' or float(montant) == 0:
+        return ""
+    strMtt = '{:.0f} '.format(int(float(montant)))
+    return strMtt.strip()
+
+def FmtPercent(montant):
+    if isinstance(montant,str): montant = montant.replace(',','.')
+    if montant == None or montant == '' or float(montant) == 0:
+        return ""
+    strMtt = '{:}% '.format(int(float(montant)))
+    return strMtt
+
+def FmtDate(date):
+    return DateToFr(date)
+
+def FmtTelephone(texte):
+    # formatage du numéro de téléphone
+    if texte == None: return ''
+    if not isinstance(texte,str):
+        texte = str(texte)
+    if texte[:2] == '00':
+        texte = '+'+texte[2:]
+
+    # on accepte deux tirets pour les numéros étrangers, sinon c'est abusif
+    nbtir = texte.count('-')
+    if nbtir >2: texte= texte.replace('-',' ')
+
+    texte = texte.replace('.',' ')
+    nbspc = texte.count(' ')
+    # cas d'une saisie déjà formatée, on la laisse
+    if nbspc > 2 : return texte
+
+    # si moins de trois espaces on les enlève pour refaire
+    texte = texte.replace(' ','')
+    texte += 'xxx' # force la dernière occurence
+    if len(texte) == 10+3 and texte[0] != '+':
+        # cas français simple
+        ntel = ' '.join([i + j for i, j in zip(texte[::2], texte[1::2])])
+    else:
+        # autres cas découpés par 3
+        ntel = ' '.join([i + j + k for i, j, k in zip(texte[::3], texte[1::3],texte[2::3])])
+    ntel = ntel.replace('( ','(')
+    ntel = ntel.replace(' )',')')
+    ntel = ntel.replace('x','') # retire le forçage
+    return ntel.strip()
+
+def FmtBool(value):
+    if value == False:
+        return 'N'
+    if value == True:
+        return 'O'
+    return ''
+
+def FmtBoolX(value):
+    if value == True:
+        return 'X'
+    return ''
+
+def FmtMontant(montant,prec=2,lg=None):
+    out = ''
+    if isinstance(montant,str):
+        montant = montant.replace(',','.')
+        try: montant = float(montant)
+        except: pass
+    if not isinstance(montant,(int,float)): montant = 0.0
+    if float(montant) != 0.0:
+        out = "{: ,.{prec}f} {:} ".format(montant,SYMBOLE,prec=prec).replace(',', ' ')
+    if lg:
+        out = (' '*lg + out)[-lg:]
+    return out
+
+def FmtSolde(montant):
+    if isinstance(montant,str):montant = montant.replace(',','.')
+    if montant == None or montant == '':
+        return ""
+    strMtt = '{:+,.2f} '.format(float(montant))
+    strMtt = strMtt.replace(',',' ')+ SYMBOLE
+    return strMtt
+
+# Formatage de textes
+def Supprespaces(txt='',camelCase=True):
+    if not txt: return
+    txt = txt.strip()
+    if camelCase:
+        lstTxt = txt.split(' ')
+        txt = ''
+        for mot in lstTxt:
+            txt += mot.capitalize()
+    else:
+        txt = txt.replace(' ','')
+    return txt
+
+def NoPunctuation(txt= '',punct= "'!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'"):
+    import re
+    regex = re.compile('[%s]' % re.escape(punct))
+    return regex.sub(' ', txt)
+
+def NoChiffres(txt=''):
+    newtxt = ""
+    if isinstance(txt,str):
+        chiffres = "0123456789.,-+"
+        newtxt = ''
+        for a in txt:
+            if not (a in chiffres):
+                newtxt += a
+    return newtxt
+
+def NoLettre(txt=''):
+    if isinstance(txt,str):
+        chiffres = "0123456789.,-+"
+        newtxt = ''
+        for a in txt:
+            if a in chiffres:
+                newtxt += a
+        txt = newtxt
+        txt = txt.replace(',','.')
+    return txt
+
+def NormaliseNomChamps(lstCol=None):
+    if not lstCol: lstCol = []
+    # Normalise ascii le contenu d'une liste de chaines
+    for ix in range(len(lstCol)):
+        if not isinstance(lstCol[ix],str):
+            continue
+        lstCol[ix] = NoAccents(lstCol[ix]).lower()
+        lstCol[ix] = NoChiffres(lstCol[ix]).lower()
+
+def NoAccents(texte,lower=True):
+    if not texte:
+        return
+    # met en minuscule sans accents et sans caractères spéciaux
+    code = ''.join(c for c in unicodedata.normalize('NFD', texte) if unicodedata.category(c) != 'Mn')
+    #("é", "e"), ("è", "e"), ("ê", "e"), ("ë", "e"), ("à", "a"), ("û", ""), ("ô", "o"), ("ç", "c"), ("î", "i"), ("ï", "i")
+
+    if lower: code = code.lower()
+    code = ''.join(car for car in code if car not in " %)(.[]',;/\n")
+    return code
+
+def TextToDict(txt):
+    # convertit un texte pseudo json avec séparateurs ':' et ';' sans '"'en dictionnaire python
+    dic = {}
+    lstDonnees = txt.split(";")
+    if len(lstDonnees) == 1:
+        lstDonnees = txt.split(",")
+    for donnee in lstDonnees:
+        lstElem = donnee.split(":")
+        if len(lstElem) >= 2:
+            key = lstElem[0]
+            value = lstElem[1]
+            dic[key] = value
+    return dic
+
+# Diverses fonctions-------------------------------------------------------------------------------------------
+def ToFloat(valeur):
+    # transorme n'importe quelle entrée en float
+    nbre = 0.0
+    if isinstance(valeur,str):
+        val = NoLettre(valeur).strip()
+        if len(val)>0:
+            nbre = float(val)
+    elif isinstance(valeur,(float,int,bool,decimal.Decimal)):
+        nbre = float(valeur)
+    return nbre
+
+def Nz(param):
+    # fonction Null devient zero, et extrait les chiffres d'une chaîne pour faire un nombre
+    if isinstance(param,str):
+        tmp = ''
+        for x in param:
+            if (ord(x) > 42 and ord(x) < 58):
+                tmp +=x
+        tmp = tmp.replace(',','.')
+        lstval = tmp.split('.')
+        if len(lstval)>=2: tmp = lstval[0] + '.' + lstval[1]
+        param = tmp
+    if isinstance(param,int):
+        valeur = param
+    else:
+        try:
+            valeur = float(param)
+        except: valeur = 0.0
+    return valeur
+
+def MoyPond(ltXY):
+    # moyenne pondérée d'une liste de couples de valeurs, renvoie la moyennePondérée des Y
+    sumX = 0
+    sumXY = 0
+    moyY = 0.0
+    for x,y in ltXY:
+        sumX += x
+        sumXY += y
+    if sumX != 0:
+        moyY = sumXY / sumX
+    return moyY
+
+def ListTuplesToDict(lstTuples):
+    dict = {}
+    if isinstance(lstTuples,list):
+        for cle,don in lstTuples:
+            dict[cle] = don
+    return dict
+
+def ListToDict(lstCles,lstValeurs):
+    dict = {}
+    if isinstance(lstCles,list):
+        for cle in lstCles:
+            idx = lstCles.index(cle)
+            dict[cle] = None
+            if isinstance(lstValeurs, (list,tuple)) and len(lstValeurs) >= idx:
+                dict[cle] = lstValeurs[idx]
+    return dict
+
+def DictToList(dic):
+    # sépare les clés et les valeurs d'un dictionnaire
+    lstCles = []
+    lstValeurs = []
+    if isinstance(dic,dict):
+        for cle,valeur in dic.items():
+            # cas des dictionnaires dans dictionnaires, le premier niveau est ignoré
+            if isinstance(valeur,dict):
+                sscles, ssval = DictToList(valeur)
+                lstCles += sscles
+                lstValeurs += ssval
+            else:
+                lstCles.append(cle)
+                lstValeurs.append(valeur)
+    return lstCles,lstValeurs
+
+def DeepCopy(data):
+    if isinstance(data,(dict)):
+        return CopyDic(data)
+    if isinstance(data,(list,tuple)):
+        data2 = [DeepCopy(x) for x in data]
+        if isinstance(data,tuple):
+            data2 = tuple(data2)
+        return data2
+    return data
+
+def CopyDic(dic):
+    #deepcopy d'un dictionnaire
+    dic2 = {}
+    for key, data in dic.items():
+        # traitement de la clé
+        if isinstance(key,(list,tuple)):
+            key2 = [x for x in key]
+            if isinstance(key,tuple):
+                key2 = tuple(key2)
+        else:
+            key2 = key
+        # traitement de data
+        dic2[key2] = DeepCopy(data)
+    return dic2
+
+def ResizeBmp(bitmap,size,qual=wx.IMAGE_QUALITY_HIGH):
+    # resize une image en format bitmap
+    arg = size + (qual,)
+    imageWx = bitmap.ConvertToImage()
+    imageWx = imageWx.Scale(*arg)
+    imageBmp = wx.Bitmap(imageWx)
+    return imageBmp
+
+def GetImage(image,size=None,qual=wx.IMAGE_QUALITY_HIGH):
+    # reçoit le cheminNom d'une image bitmap et la renvoie bitmap éventuellement scalée
+    imageBmp = wx.Bitmap(image)
+    if size: imageBmp = ResizeBmp(imageBmp,size,qual)
+    return imageBmp
+
+def PrefixeNbre(param):
+    if not isinstance(param,str):
+        return ''
+    # extrait le préfixe chaîne d'un nombre
+    radicalNbre = str(Nz(param))
+    ix = len(param)
+    if radicalNbre != '0.0':
+        ix = param.find(radicalNbre[0])
+    return param[:ix]
+
+def LettreSuivante(lettre=''):
+        # incrémentation d'un lettrage
+        if not isinstance(lettre, str): lettre = 'A'
+        if lettre == '': lettre = 'A'
+        lastcar = lettre[-1]
+        precars = lettre[:-1]
+        if ord(lastcar) in (90, 122):
+            if len(precars) == 0:
+                precars = chr(ord(lastcar) - 25)
+            else:
+                precars = LettreSuivante(precars)
+            new = precars + chr(ord(lastcar) - 25)
+        else:
+            new = precars + chr(ord(lastcar) + 1)
+        return new
+
+def IncrementeRef(ref):
+    # incrémente une référence compteur constituée d'un préfixe avec un quasi-nombre ou pas
+    pref = PrefixeNbre(ref)
+    if len(ref) > len(pref):
+        nbre = int(Nz(ref))+1
+        lgnbre = len(str(nbre))
+        nbrstr = '0'*lgnbre + str(nbre)
+        refout = pref + nbrstr[-lgnbre:]
+    else:
+        # référence type lettrage
+        refout = LettreSuivante(ref)
+    return refout
+
+def BorneMois(dte,fin=True, typeOut=datetime.date):
+
+    if not typeOut in (datetime.date,datetime.time,wx.DateTime,str):
+        typeOut = None
+
+    # traitement de sortie si typeOut a été précisé
+    def formatOut(wxdte):
+        if typeOut == datetime.date:
+            return WxdateToDatetime(wxdte)
+        if typeOut == str:
+            return WxDateToStr(wxdte,iso=True)
+        return wxdte
+
+    # traitement apres normalisation en wxDate
+    def action(wxdte):
+        # action  calcul début ou fin de mois sur les wx.DateTime
+        if isinstance(wxdte,wx.DateTime):
+            if fin:
+                dteout = wx.DateTime.FromDMY(1,wxdte.GetMonth(),wxdte.GetYear())
+                dteout += wx.DateSpan(days=-1,months=1)
+            else:
+                # dte début de mois
+                dteout = wx.DateTime.FromDMY(1,wxdte.GetMonth(),wxdte.GetYear())
+            return dteout
+        return None
+
+    # analyse de l'entrée
+    if isinstance(dte,(datetime.date,datetime.datetime)):
+        if not typeOut:
+            formatOut = WxdateToDatetime
+        return formatOut(action(DatetimeToWxdate(dte)))
+
+    elif isinstance(dte,wx.DateTime):
+        if not typeOut or typeOut == wx.DateTime:
+            return action(dte)
+        return formatOut(action(dte))
+
+    elif isinstance(dte,str):
+        dte = dte.strip()
+        wxdte = DateSqlToWxdate(FmtDate(dte))
+        if not wxdte:
+            return None
+        if typeOut != str:
+            return formatOut(action(wxdte))
+        #  sans précision sur le retour : fait dans le format str initial
+        if "-" in dte:
+            return WxDateToStr(action(wxdte),iso=True)
+        elif "/" in dte:
+                dtefr = WxDateToStr(action(wxdte), iso=False)
+                if len(dte)> 8:
+                    return dtefr
+                else: return dtefr[:6]+dtefr[8:]
+        else:
+            dtefr = WxDateToStr(action(wxdte), iso=False)
+            dtefr = dtefr.replace('/','')
+            if len(dte) == 6:
+                return dtefr[:4]+dtefr[6:]
+            elif len(dte) == 8:
+                return dtefr
+            else:
+                msg = "Date entrée non convertible : %s"%dte
+                raise Exception(msg)
+
+    # transformation en sortie
+    return dte
+
+def FinDeMois(date,typeOut=datetime.date):
+    # Retourne le dernier jour du mois dans le format reçu
+    return BorneMois(date,fin=True,typeOut=typeOut)
+
+def DebutDeMois(date,typeOut=datetime.date):
+    # Retourne le dernier jour du mois dans le format reçu
+    return BorneMois(date,fin=False,typeOut=typeOut)
+
+def PeriodeMois(date,typeOut=datetime.date):
+    # Retourne un tuple Debut de mois, Fin de mois de la date fournie
+    return (DebutDeMois(date,typeOut),FinDeMois(date,typeOut))
+
+def ProrataCommercial(entree,sortie,debutex,finex):
+    # Prorata d'une présence sur exercice sur la base d'une année commerciale pour un bien entré et sorti
+    # normalisation des dates iso en datetime
+    [entree,sortie,debut,fin] = [DateToDatetime(x) for x in [entree,sortie,debutex,finex]]
+    if not debut or not fin:
+        mess = "Date d'exercices impossibles: du '%s' au '%s'!"%(str(debutex),str(finex))
+        raise Exception(mess)
+    # détermination de la période d'amortissement
+    if not entree: entree = debut
+    if not sortie: sortie = fin
+    if entree > fin: debutAm = fin
+    elif entree > debut : debutAm = entree
+    else: debutAm = debut
+    if sortie < debut: finAm = debut
+    elif sortie < fin : finAm = sortie
+    else: finAm = fin
+
+    def delta360(deb,fin):
+        #nombre de jours d'écart en base 360jours / an
+        def jour30(dte):
+            # arrondi fin de mois en mode 30 jours
+            if dte.day > 30:
+                return 30
+            # le lendemain est-il un changement de mois? pour fin février bissextile ou pas
+            fdm = (dte + datetime.timedelta(days=1)).month - dte.month
+            if fdm >0:
+                return 30
+            return dte.day
+        return 1 + jour30(fin) - jour30(deb) + ((fin.month - deb.month) + ((fin.year - deb.year) * 12)) * 30
+    taux = round(delta360(debutAm,finAm) / 360,6)
+    return taux
+
+def FiltreChiffres(txt = ""):
+    if txt == None: txt = ""
+    permis = "0123456789+-.,"
+    new = ""
+    for a in txt:
+        if a in permis:
+            new += a
+    return new
+
+if __name__ == '__main__':
+    import os
+    os.chdir("../..")
+    app = wx.App(0)
+
+    print(FmtDecimal(1230.05189),FmtDecimal(-1230.05189),FmtDecimal(0))
+    print(FmtSolde(8520.547),FmtSolde(-8520.547),FmtSolde(0))
+    print(FmtMontant(8520.547),FmtMontant(-8520.547),FmtMontant(0))
+    print(FmtDate('01022019'))
+    print(NoAccents("ÊLève!"))
+    print(FmtTelephone('0494149367'))
+    print(DateToFr(''))
+    ret = TextToDict("Immatriculation:FR-224:-JV;Energie:GO;Mise'EnService:2004-06-11;DateAchat:2020-07-16;Places:9;Puissance:7;Compte:61624;PrixKM:0")
+    print(str(ret) +'|')
+    print('Fin des tests exemples de fonctions')
+
+
