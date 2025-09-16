@@ -1,0 +1,2 @@
+version 1.1.1.1 (13/09/2025)
+    - outil pour ouverture bases accessDB en 32bits
