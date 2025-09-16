@@ -24,7 +24,7 @@ def GetConfigs():
     grpCONFIGS = cfg.GetDict(groupe='CONFIGS')
     return grpAPPLI,grpUSER,grpCONFIGS
 
-def GetOneConfig(self, nomConfig=None, mute=False):
+def GetOneConfig(self, nomConfig='test', mute=False):
     # appel d'une configuration nommée, retourne le dict des params (à revoir qd choix possibles!!)
     cfg = xshelve.FileShelve()
     grpCONFIGS = cfg.GetDict(groupe='CONFIGS')
@@ -33,6 +33,11 @@ def GetOneConfig(self, nomConfig=None, mute=False):
         for dicConfig in grpCONFIGS['lstConfigs']:
             if dicConfig['db_reseau']['typeDB'] == 'Access':
                 config = dicConfig['db_reseau']
+        return config
+    else:
+        config = {'serveur':r"D:\Quadra\Database\cpta\DC\MATTH",
+                  'nameDB':'qcompta.mdb',
+                  'typeDB':'access'}
         return config
 
 class DB():
@@ -581,5 +586,5 @@ class DB():
 if __name__ == "__main__":
     app = wx.App()
     os.chdir("..")
-    db = DB()
+    db = DB(nomFichier=r"D:\Quadra\Database\cpta\DC\MATTH\qcompta.mdb")
     db.AfficheTestOuverture()
