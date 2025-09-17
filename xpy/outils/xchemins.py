@@ -10,7 +10,8 @@ import sys
 import appdirs
 import wx
 import tempfile
-from xformat import SEP
+#from xformat import SEP
+SEP = '\\'
 
 rep = os.path.abspath(__file__)
 # la racine va s'arrête au niveau 'xpy'
@@ -18,6 +19,10 @@ REP_RACINE = rep.split('%sxpy%s'%(SEP,SEP))[0]
 
 def IsFrozen():
     return getattr(sys, 'frozen', '')
+
+def GetConfigDir():
+    std_paths = wx.StandardPaths.Get()  # Appelle les répertoires
+    return std_paths.GetConfigDir()
 
 def GetRepRacine(ajout="Data"):
     """ Retourne le chemin du répertoire principal """

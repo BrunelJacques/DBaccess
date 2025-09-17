@@ -10,6 +10,7 @@
 import os
 import wx
 import sqlite3
+import pyodbc
 from xpy.outils import xshelve
 
 DICT_CONNEXIONS = {}
@@ -42,13 +43,10 @@ def GetOneConfig(self, nomConfig='test', mute=False):
 
 class DB():
     # accès à la base de donnees principale
-
-    def __init__(self, IDconnexion = None, config=None, nomFichier=None, mute=False):
+    def __init__(self,  config=None, nomFichier=None, mute=False):
         # config peut être soit un nom de config soit un dictionaire
-        #print(config,nomFichier,IDconnexion)
         self.echec = 1
-        self.IDconnexion = IDconnexion
-        self.nomBase = 'personne!'
+        self.nomBase = '-'
         self.isNetwork = False
         self.lstTables = None
         self.lstIndex = None
@@ -59,7 +57,7 @@ class DB():
         if nomFichier:
             self.OuvertureFichierLocal(nomFichier)
             return
-        if not IDconnexion:
+        else:
             self.connexion = None
 
             # appel des params de connexion stockés dans UserProfile et Data
@@ -88,26 +86,6 @@ class DB():
                 if not mute:
                     wx.MessageBox(mess)
                 return
-
-            if self.connexion:
-                # Mémorisation de l'ouverture de la connexion et des requêtes
-                if len(DICT_CONNEXIONS) == 0:
-                    self.IDconnexion = 1
-                else:
-                    self.IDconnexion = sorted(DICT_CONNEXIONS.keys())[-1]+1
-                DICT_CONNEXIONS[self.IDconnexion] = {}
-                DICT_CONNEXIONS[self.IDconnexion]['isNetwork'] = self.isNetwork
-                DICT_CONNEXIONS[self.IDconnexion]['typeDB'] = self.typeDB
-                DICT_CONNEXIONS[self.IDconnexion]['connexion'] = self.connexion
-                DICT_CONNEXIONS[self.IDconnexion]['cfgParams'] = self.cfgParams
-        else:
-            if self.IDconnexion in DICT_CONNEXIONS:
-                # la connexion a été conservée (absence de DB.Close)
-                self.isNetwork  = DICT_CONNEXIONS[self.IDconnexion]['isNetwork']
-                self.typeDB     = DICT_CONNEXIONS[self.IDconnexion]['typeDB']
-                self.connexion  = DICT_CONNEXIONS[self.IDconnexion]['connexion']
-                self.cfgParams  = DICT_CONNEXIONS[self.IDconnexion]['cfgParams']
-                if self.connexion: self.echec = 0
 
     def AfficheTestOuverture(self,info=""):
         style = wx.ICON_STOP
@@ -156,7 +134,7 @@ class DB():
             return
         # Initialisation de la connexion
         try:
-            import pyodbc
+
             """
             conn_str = (
                 r'DRIVER={Microsoft Access Driver (*.mdb)};'
@@ -462,7 +440,6 @@ class DB():
     def Close(self):
         try :
             self.connexion.close()
-            del DICT_CONNEXIONS[self.IDconnexion]
         except :
             pass
 

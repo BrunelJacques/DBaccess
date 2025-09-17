@@ -1,4 +1,5 @@
 import wx
+import xchemins
 import pyodbc
 from xpy.xDB import DB, GetConfigs,GetOneConfig
 
@@ -7,12 +8,22 @@ class Dialog(wx.Panel):
     def __init__(self, parent):
         super().__init__(parent)
 
+        std_paths = wx.StandardPaths.Get()
+        print(' std_paths.GetConfigDir de test',
+              std_paths.GetConfigDir())  # Return the directory containing the system config files.
+
+
+        print(' std_paths.GetConfigDir de xchemins',
+              xchemins.GetConfigDir())  # Return the directory containing the system config files.
+
+
         # scan environnement
         """
-        print(pyodbc.drivers()) # perme de déterminer la version
+        print(pyodbc.drivers()) # permet de déterminer la version
         print(GetConfigs())
         print(GetOneConfig('quadra'))"""
 
+        """
         self.InitDB()
         self.Action()
 
@@ -38,10 +49,10 @@ class Dialog(wx.Panel):
         cursor =self.cursor
         # --------------------  SQL  ------------------------
         myTable = "Ecritures"
-        req = f"""SELECT * 
+        req = f"SELECT * 
             FROM  {myTable}
             WHERE NumeroCompte = '75400000'
-            """
+            "
 
 
         cursor.execute(req)
@@ -58,9 +69,11 @@ class Dialog(wx.Panel):
         cursor.execute(req)
         print("troisième",cursor.fetchone())
 
+    """
 
 if __name__ == '__main__':
     import os
+    import xchemins
     os.chdir("..")
     os.chdir("..")
 
